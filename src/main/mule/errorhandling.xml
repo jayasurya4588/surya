@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:validation="http://www.mulesoft.org/schema/mule/validation"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="cde84c9d-0d54-47d2-8007-f0a427932785" >
+		<http:listener-connection host="0.0.0.0" port="8082" />
+	</http:listener-config>
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="afbcb034-cdfb-42eb-a27e-9bd91f2da0b9" >
+		<db:mssql-connection host="172.17.0.180" instanceName="coke team" user="coke_user" password="Miracle@123" databaseName="COKE" />
+	</db:config>
+	<flow name="errorhandlingFlow" doc:id="667aa364-d42d-4cec-aa60-117cf72e98c6" >
+		<http:listener doc:name="Listener" doc:id="7952b4ef-d3c3-47a3-ae8f-496d248b94b0" config-ref="HTTP_Listener_config" path="/emp">
+			<http:error-response statusCode="#[vars.statuscode]" reasonPhrase="#[vars.reasonphrase]">
+				<http:body ><![CDATA[#[payload]]]></http:body>
+			</http:error-response>
+		</http:listener>
+		<validation:is-number numberType="INTEGER" doc:name="Is number" doc:id="47328c89-0ced-4c98-8320-802056f3e574" value="#[attributes.queryParams.id]"/>
+		<db:select doc:name="Select" doc:id="86d1e7f0-0a42-43d7-9f92-98d7612f0b51" config-ref="Database_Config">
+			<db:sql >select *  detaildata where id=:id</db:sql>
+			<db:input-parameters ><![CDATA[#[{
+id : attributes.queryParams.id
+}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Transform Message" doc:id="9fe65a5a-8645-44a4-a232-2fe52260c95c" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"empid" : payload[0].id ,
+	"firstname" : payload[0].firstname ,
+	"lastname" : payload[0].lastname,
+	"company" : payload[0].company
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="a52bf3fd-af4f-4f78-9868-5d988b1343ca" type="VALIDATION:INVALID_NUMBER">
+				<ee:transform doc:name="Transform Message" doc:id="cbe4369a-8be4-4e82-afb3-e211615d2403" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"Statuscode" : 400 ,
+	"message" : error.description
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables >
+						<ee:set-variable variableName="statuscode" ><![CDATA[400]]></ee:set-variable>
+						<ee:set-variable variableName="reasonphrase" ><![CDATA["bad request"]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</on-error-propagate>
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="1c94144f-c5f9-4fcf-ada6-af1b90fcc600" type="ANY">
+				<ee:transform doc:name="Transform Message" doc:id="a603df9b-d9fd-4bdc-b137-ec41aca8cfaf" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"statuscode" : 500 ,
+	"Reasonphrase" : "error with sql query"
+}]]></ee:set-payload>
+					</ee:message>
+					<ee:variables >
+						<ee:set-variable variableName="statuscode" ><![CDATA[500]]></ee:set-variable>
+						<ee:set-variable variableName="reasonphrase" ><![CDATA["sql error"]]></ee:set-variable>
+					</ee:variables>
+				</ee:transform>
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+</mule>
